@@ -9,37 +9,111 @@ from sys import argv
 script, filename = argv
 
 # import tasks are run
-print '*'*50
+print '\n'
+print '*'*80
 print '\nImporting %r. Plese specify column separator and press enter. Example what to type: ,' % filename
 separator = raw_input("> ")
 data = pd.read_csv(filename, error_bad_lines=False, sep=separator)
 print 'Import succesful. Following columns imported:\n'
 print data.columns
-print '*'*50
+print '\n'
+print '*'*80
 print '\nSample data:'
 print data.head()
+print '\n'
 
 # data cleaning to rename columns and remove currency symbols
 def data_cleaning(data):
-    data_cleaned = data.rename(columns={'Account number':'ACC', 'Credit': 'CR', 'Debit': 'DR'})
-    data_cleaned['CR'] = data_cleaned.CR.replace('[\$,)]', '', regex=True).astype(float)
-    data_cleaned['DR'] = data_cleaned.DR.replace('[\$,)]', '', regex=True).astype(float)
-    data_cleaned['CR'] = data_cleaned.CR.replace('[\€,)]', '', regex=True).astype(float)
-    data_cleaned['DR'] = data_cleaned.DR.replace('[\€,)]', '', regex=True).astype(float)
-    return data_cleaned
+    print "Please specify name of the column containing account number."
+    acc_no = raw_input('> ')
+    print "Please specify name of the column containing debit amounts."
+    debit = raw_input('> ')
+    print "Please specify name of the column containing credit amounts."
+    credit = raw_input('> ')
+    print "Please specify name of the column containing transaction ID."
+    trans_ID = raw_input('> ')
+    print "Please specify name of the column containing user ID."
+    user_ID = raw_input('> ')
+    print "Please specify name of the column containing posting date."
+    post_date = raw_input('> ')
+    print "Please specify name of the column containing entry date."
+    entry_date = raw_input('> ')
+
+    # test if amounts are in single column or not
+    single_column_amount = False
+    if debit == credit:
+        single_column_amount = True
+        data_cleaned = data.rename(columns={acc_no:'Account no', debit: 'Amount',\
+            trans_ID: 'Transaction ID', user_ID: 'User ID',\
+            post_date:'Posting date', entry_date:'Entry date'})
+        data_cleaned['Amount'] = data_cleaned.Amount.str.strip()
+        data_cleaned['Amount'] = data_cleaned.Amount.replace('[\$,)]', '', regex=True)
+        data_cleaned['Amount'] = data_cleaned.Amount.replace('[\€,)]', '', regex=True)
+        data_cleaned['Amount'] = data_cleaned.Amount.replace('[\EUR,)]', '', regex=True).astype(float)
+    else:
+        data_cleaned = data.rename(columns={acc_no:'Account no', credit: 'Credit',\
+            debit: 'Debit', trans_ID: 'Transaction ID', user_ID: 'User ID',\
+            post_date:'Posting date', entry_date:'Entry date'})
+        data_cleaned['Credit'] = data_cleaned.Credit.str.strip()
+        data_cleaned['Debit'] = data_cleaned.Debit.str.strip()
+        data_cleaned['Credit'] = data_cleaned.Credit.replace('[\$,)]', '', regex=True)
+        data_cleaned['Debit'] = data_cleaned.Debit.replace('[\$,)]', '', regex=True)
+        data_cleaned['Credit'] = data_cleaned.Credit.replace('[\€,)]', '', regex=True)
+        data_cleaned['Debit'] = data_cleaned.Debit.replace('[\€,)]', '', regex=True)
+        data_cleaned['Credit'] = data_cleaned.Credit.replace('[\EUR,)]', '', regex=True).astype(float)
+        data_cleaned['Debit'] = data_cleaned.Debit.replace('[\EUR,)]', '', regex=True).astype(float)
+    
+    print '\n'
+    print '*'*80
+    print '\nData cleaning completed. Columns identified as follows:\n'
+    print data_cleaned.columns
+    return data_cleaned, single_column_amount
 
 # completeness test: group by account name and show sum of CR/DR
-def completeness_test(data_cleaned):
-    completeness = data_cleaned.groupby(['ACC']).agg({'CR':'sum','DR':'sum'})
+def completeness_test(data_cleaned, single_column_amount):
+    if single_column_amount == True:
+        completeness = data_cleaned.groupby(['Account no'].agg({'Amount':'sum'}))
+    else:
+        completeness = data_cleaned.groupby(['Account no']).agg({'Credit':'sum','Debit':'sum'})
+
+    # write to file and complete
     completeness.to_csv(r'completeness.txt', sep=';', mode='a')
-    print '*'*50
+    print '\n'
+    print '*'*80
     print "\nCompleteness test completed in completeness.txt."
 
-def cr_dr_test(data_cleaned):
-    cr_dr = data_cleaned.agg({'CR':'sum', 'DR':'sum'})
-    cr_dr.to_csv(r'cr_dr.txt', sep=';', mode='a')
-    print '*'*50
-    print "\nCredits=Debits test completed in cr_dr.txt."
+# cr/dr test: sum all credits and debits
+def cr_dr_test(data_cleaned, single_column_amount):
+    if single_column_amount == True:
+        debit = data_cleaned.Amount[data_cleaned.Amount > 0].sum()
+        credit = data_cleaned.Amount[data_cleaned.Amount < 0].sum()
+        data = {'Debits: ': [debit], 'Credits': [credit]}
+        cr_dr = pd.DataFrame(data)
+        # test result
+        diff = abs(debit) - abs(credit)
+        if diff == 0:
+            result = 'passed'
+        else:
+            result = 'failed'
+    else:
+        debit = data_cleaned.Debit.sum()
+        credit = data_cleaned.Credit.sum()
+        data = {'Debits: ': [debit], 'Credits': [credit]}
+        cr_dr = pd.DataFrame(data)
+        # test result
+        diff = abs(debit) - abs(credit)
+        if diff == 0:
+            result = 'passed'
+        else:
+            result = 'failed'
 
-data_cleaned = data_cleaning(data)
-completeness_test(data_cleaned)
+    # write to file and complete
+    cr_dr.to_csv(r'cr_dr.txt', sep=';', mode='a')
+    print '\n'
+    print '*'*80
+    print "\nCredits = Debits test completed in cr_dr.txt. Test %s with diff %d." % (result, diff)
+
+data_cleaned, single_column_amount = data_cleaning(data)
+
+completeness_test(data_cleaned, single_column_amount)
+cr_dr_test(data_cleaned, single_column_amount)
