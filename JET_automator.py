@@ -1,4 +1,6 @@
 # coding: utf-8
+# copyright Arunas Umbrasas, 2018
+# arunas.umb@gmail.com
 
 import pandas as pd
 import numpy as np
