@@ -6,21 +6,42 @@ import pandas as pd
 import re
 from sys import argv
 
+print '\n'
+print '*'*80
+
 # filename is specified as script argument, usage: python jet_automator.py filename.csv
 if len(argv) == 3:
-    script, filename, config_file = argv
+    script, filename, i = argv
+    # import separator from config file if available
+    print '\nImporting %r.' % filename
+    with open('config.txt', 'rU') as in_file:
+        config_list = in_file.read().split('\n')
+    separator = config_list[7]
 elif len(argv) == 2:
     script, filename = argv
+    # specify separator if config file unavailable
+    print '\nImporting %r. Plese specify column separator and press enter. Example what to type: ,' % filename
+    separator = raw_input("> ")
+    if filename == "help":
+        print '\n'
+        print '*'*80
+        print '''\nJET automator help
+
+        USAGE: JET automator can be launched using one or two arguments as follows:
+
+        python JET automator [data file name] [i] where:
+
+        [data file name] - the name of the datafile, which is contained within the same folder and is .csv
+        [i] - flag makes the app try to import column names from a previous launch (config.txt should be available)\n'''
+        quit()
 else:
-    print "Please specify at least the data file as argument, eg. python JET_automator.py data.csv"
+    print "Please specify at least the data file as argument, eg. python JET_automator.py data.csv or python JET_automator.py help"
 
 
 # import tasks are run
-print '\n'
-print '*'*80
-print '\nImporting %r. Plese specify column separator and press enter. Example what to type: ,' % filename
-separator = raw_input("> ")
 data = pd.read_csv(filename, error_bad_lines=False, sep=separator)
+
+
 print 'Import succesful. Following columns imported:\n'
 print data.columns
 print '\n'
@@ -32,9 +53,9 @@ print '\n'
 # if config is specified, import config settings; otherwise ask for column names to be clarified
 def data_cleaning(data):
     if len(argv) == 3:
-        with open(config_file, 'rU') as in_file:
+        with open('config.txt', 'rU') as in_file:
             config_list = in_file.read().split('\n')
-        print '\n%s loaded, parsing column names:' % config_file
+        print '\nColumn names loaded from config file.'
         print config_list
         # assigning variables from config
         acc_no = config_list[0]
@@ -60,12 +81,12 @@ def data_cleaning(data):
         print "Please specify name of the column containing entry date."
         entry_date = raw_input('> ')
         # writing column information to file
-        config_list = [acc_no, debit, credit, trans_ID, user_ID, post_date, entry_date]
+        config_list = [acc_no, debit, credit, trans_ID, user_ID, post_date, entry_date, separator]
         with open('config.txt', 'w') as out_file:
             out_file.write('\n'.join(config_list))
 
 # data cleaning to rename columns and remove currency symbols
-    print "\nCalculating."
+    print "\nReconfiguring columns for analysis."
     # test if amounts are in single column or not
     single_column_amount = False
     if debit == credit:
@@ -87,10 +108,16 @@ def data_cleaning(data):
         data_cleaned['Credit'] = data_cleaned.Credit.replace('[\EUR,)]', '', regex=True).astype(float)
         data_cleaned['Debit'] = data_cleaned.Debit.replace('[\EUR,)]', '', regex=True).astype(float)
     
+    # type conversions that do not depend on single_column_amount
+    data_cleaned[['Account no', 'Transaction ID', 'User ID']] = data_cleaned[['Account no', \
+    'Transaction ID', 'User ID']].astype(str)
+
     print '\n'
     print '*'*80
     print '\nData cleaning completed. Columns identified as follows:\n'
     print data_cleaned.columns
+    print '\n'
+    print data_cleaned.dtypes
     return data_cleaned, single_column_amount
 
 # completeness test: group by account name and show sum of CR/DR
@@ -137,6 +164,26 @@ def cr_dr_test(data_cleaned, single_column_amount):
     print '*'*80
     print "\nCredits = Debits test completed in cr_dr.txt. Test %s with diff %d." % (result, diff)
 
+# function that writes specified GL account detail to file
+def detail(data_cleaned):
+    more_detail = True
+    while more_detail == True:
+        print '*'*80
+        print '\nEnter a GL account for which detail is needed or \'q\' to return to menu.'
+        account_detail = raw_input("> ")
+        if account_detail == 'q':
+            more_detail == False
+            break 
+        elif str(account_detail) not in data_cleaned['Account no'].tolist():
+            print "No such GL account in data.\n"
+        else:
+            detail = data_cleaned.loc[data_cleaned['Account no'].astype(str) == str(account_detail)]
+            # complete and write to file
+            detail.to_csv(r'%s detail.txt' % account_detail, sep=';', mode='a')
+            print '\n'
+            print '*'*80
+            print "\n%s detail saved in %s detail.txt.\n" % (account_detail, account_detail)  
+
 def correspondence(data_cleaned, single_column_amount):
     more_correspondence = True
     while more_correspondence == True:
@@ -161,14 +208,13 @@ def correspondence(data_cleaned, single_column_amount):
                 data_cleaned.loc[data_cleaned['Transaction ID'].isin(account_transactions), '%s correspondence' % type_of_correspondence] = 'correspondence'
                 data_cleaned.loc[data_cleaned['Transaction ID'].isin(account_transactions), '%s correspondence details' % type_of_correspondence] = 'Corresponds to %s' % account
                 data_cleaned.loc[data_cleaned['Account no'].astype(str) == str(account), '%s correspondence' % type_of_correspondence] = "%s" % type_of_correspondence
-                correspondence = data_cleaned.loc[data_cleaned['%s correspondence' % type_of_correspondence] != ""]
-   
-        # complete and write to file
-        correspondence = data_cleaned.loc[data_cleaned['%s correspondence' % type_of_correspondence] != ""]
-        correspondence.to_csv(r'%s correspondence.txt' % type_of_correspondence, sep=';', mode='a')
-        print '\n'
-        print '*'*80
-        print "\n%s correspondence test completed in %s correspondence.txt." % (type_of_correspondence, type_of_correspondence)
+    
+            # complete and write to file
+            correspondence = data_cleaned.loc[data_cleaned['%s correspondence' % type_of_correspondence] != ""]
+            correspondence.to_csv(r'%s correspondence.txt' % type_of_correspondence, sep=';', mode='a')
+            print '\n'
+            print '*'*80
+            print "\n%s correspondence test completed in %s correspondence.txt.\n" % (type_of_correspondence, type_of_correspondence)
 
 # data cleaning launch
 data_cleaned, single_column_amount = data_cleaning(data)
@@ -182,6 +228,10 @@ while stop_app == False:
     [1] Completeness
     [2] CR=DR
     [3] Correspondence
+    [4] User summary (-)
+    [5] Seldom used accounts summary (-)
+    [6] Back-dated postings (-)
+    [7] GL account detail
     [q] Quit application"""
     user_input = raw_input ('> ')
     if user_input == '1':
@@ -190,6 +240,8 @@ while stop_app == False:
         cr_dr_test(data_cleaned, single_column_amount)
     elif user_input == '3':
         correspondence(data_cleaned, single_column_amount)
+    elif user_input == '7':
+        detail(data_cleaned)
     elif user_input == 'q':
         stop_app = False
         break
