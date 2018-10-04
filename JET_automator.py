@@ -9,19 +9,20 @@ from sys import argv
 print '\n'
 print '*'*80
 
-# filename is specified as script argument, usage: python jet_automator.py filename.csv
+# check argv arguments provided, load config if provided, otherwise ask to specify separator
 if len(argv) == 3:
     script, filename, i = argv
     # import separator from config file if available
     print '\nImporting %r.' % filename
     with open('config.txt', 'rU') as in_file:
         config_list = in_file.read().split('\n')
-    separator = config_list[7]
+    separator = config_list[0]
 elif len(argv) == 2:
     script, filename = argv
     # specify separator if config file unavailable
     print '\nImporting %r. Plese specify column separator and press enter. Example what to type: ,' % filename
     separator = raw_input("> ")
+    # print help section if help argument is specified
     if filename == "help":
         print '\n'
         print '*'*80
@@ -39,8 +40,7 @@ else:
 
 
 # import tasks are run
-data = pd.read_csv(filename, error_bad_lines=False, sep=separator)
-
+data = pd.DataFrame.from_csv(filename, sep=separator, index_col=None)
 
 print 'Import succesful. Following columns imported:\n'
 print data.columns
@@ -50,7 +50,7 @@ print '\nSample data:'
 print data.head()
 print '\n'
 
-# if config is specified, import config settings; otherwise ask for column names to be clarified
+# if config is specified, import config settings; otherwise ask for column names to be specified
 def data_cleaning(data):
     if len(argv) == 3:
         with open('config.txt', 'rU') as in_file:
@@ -58,13 +58,13 @@ def data_cleaning(data):
         print '\nColumn names loaded from config file.'
         print config_list
         # assigning variables from config
-        acc_no = config_list[0]
-        debit = config_list[1]
-        credit = config_list[2]
-        trans_ID = config_list[3]
-        user_ID = config_list[4]
-        post_date = config_list[5]
-        entry_date = config_list[6]
+        acc_no = config_list[1]
+        debit = config_list[2]
+        credit = config_list[3]
+        trans_ID = config_list[4]
+        user_ID = config_list[5]
+        post_date = config_list[6]
+        entry_date = config_list[7]
     elif len(argv) == 2:
         print "Please specify name of the column containing account number."
         acc_no = raw_input('> ')
@@ -81,12 +81,12 @@ def data_cleaning(data):
         print "Please specify name of the column containing entry date."
         entry_date = raw_input('> ')
         # writing column information to file
-        config_list = [acc_no, debit, credit, trans_ID, user_ID, post_date, entry_date, separator]
+        config_list = [separator, acc_no, debit, credit, trans_ID, user_ID, post_date, entry_date]
         with open('config.txt', 'w') as out_file:
             out_file.write('\n'.join(config_list))
 
-# data cleaning to rename columns and remove currency symbols
-    print "\nReconfiguring columns for analysis."
+    # data cleaning to rename columns and remove currency symbols
+    print "\nReconfiguring columns for analysis.\n"
     # test if amounts are in single column or not
     single_column_amount = False
     if debit == credit:
@@ -111,30 +111,34 @@ def data_cleaning(data):
     # type conversions that do not depend on single_column_amount
     data_cleaned[['Account no', 'Transaction ID', 'User ID']] = data_cleaned[['Account no', \
     'Transaction ID', 'User ID']].astype(str)
-
-    print '\n'
+        # type conversions that do not depend on single_column_amount
+    try:
+        data_cleaned[['Posting date', 'Entry date']] = pd.to_datetime(data_cleaned[['Posting date', 'Entry date']])
+    except:
+        print "[!] Could not convert Posting date and Entry date columns to dates.\n"
+    # complete and print columns, data types
     print '*'*80
     print '\nData cleaning completed. Columns identified as follows:\n'
     print data_cleaned.columns
     print '\n'
     print data_cleaned.dtypes
-    return data_cleaned, single_column_amount
+    return (data_cleaned, single_column_amount)
 
 # completeness test: group by account name and show sum of CR/DR
-def completeness_test(data_cleaned, single_column_amount):
+def completeness_test(data_cleaned, single_column_amount, separator):
     if single_column_amount == True:
         completeness = data_cleaned.groupby(['Account no']).agg({'Amount':'sum'})
     else:
         completeness = data_cleaned.groupby(['Account no']).agg({'Credit':'sum','Debit':'sum'})
 
     # write to file and complete
-    completeness.to_csv(r'completeness.txt', sep=';', mode='a')
+    completeness.to_csv(r'completeness.txt', sep=separator, mode='a')
     print '\n'
     print '*'*80
     print "\nCompleteness test completed in completeness.txt."
 
 # cr/dr test: sum all credits and debits
-def cr_dr_test(data_cleaned, single_column_amount):
+def cr_dr_test(data_cleaned, single_column_amount, separator):
     if single_column_amount == True:
         debit = data_cleaned.Amount[data_cleaned.Amount > 0].sum()
         credit = data_cleaned.Amount[data_cleaned.Amount < 0].sum()
@@ -159,13 +163,13 @@ def cr_dr_test(data_cleaned, single_column_amount):
             result = 'failed'
 
     # write to file and complete
-    cr_dr.to_csv(r'cr_dr.txt', sep=';', mode='a')
+    cr_dr.to_csv(r'cr_dr.txt', sep=separator, mode='a')
     print '\n'
     print '*'*80
     print "\nCredits = Debits test completed in cr_dr.txt. Test %s with diff %d." % (result, diff)
 
 # function that writes specified GL account detail to file
-def detail(data_cleaned):
+def detail(data_cleaned, separator):
     more_detail = True
     while more_detail == True:
         print '*'*80
@@ -179,12 +183,12 @@ def detail(data_cleaned):
         else:
             detail = data_cleaned.loc[data_cleaned['Account no'].astype(str) == str(account_detail)]
             # complete and write to file
-            detail.to_csv(r'%s detail.txt' % account_detail, sep=';', mode='a')
+            detail.to_csv(r'%s detail.txt' % account_detail, sep=separator, mode='a')
             print '\n'
             print '*'*80
             print "\n%s detail saved in %s detail.txt.\n" % (account_detail, account_detail)  
 
-def correspondence(data_cleaned, single_column_amount):
+def correspondence(data_cleaned, single_column_amount, separator):
     more_correspondence = True
     while more_correspondence == True:
         print '*'*80
@@ -208,13 +212,22 @@ def correspondence(data_cleaned, single_column_amount):
                 data_cleaned.loc[data_cleaned['Transaction ID'].isin(account_transactions), '%s correspondence' % type_of_correspondence] = 'correspondence'
                 data_cleaned.loc[data_cleaned['Transaction ID'].isin(account_transactions), '%s correspondence details' % type_of_correspondence] = 'Corresponds to %s' % account
                 data_cleaned.loc[data_cleaned['Account no'].astype(str) == str(account), '%s correspondence' % type_of_correspondence] = "%s" % type_of_correspondence
-    
-            # complete and write to file
+            
+            # filter out any rows not part of correspondence
             correspondence = data_cleaned.loc[data_cleaned['%s correspondence' % type_of_correspondence] != ""]
-            correspondence.to_csv(r'%s correspondence.txt' % type_of_correspondence, sep=';', mode='a')
+            
+            # correspondence summary
+            if single_column_amount == False:
+                correspondence_summary = correspondence.groupby(['Account no', '%s correspondence' % type_of_correspondence]).agg({'Credit': 'sum', 'Debit': 'sum'})
+            else:
+                correspondence_summary = correspondence.groupby(['Account no', '%s correspondence' % type_of_correspondence]).agg({'Amount': 'sum'})
+
+            # complete and write to file
+            correspondence.to_csv(r'%s correspondence.txt' % type_of_correspondence, sep=separator, mode='a')
+            correspondence_summary.to_csv(r'%s correspondence summary.txt' % type_of_correspondence, sep=separator, mode='a')
             print '\n'
             print '*'*80
-            print "\n%s correspondence test completed in %s correspondence.txt.\n" % (type_of_correspondence, type_of_correspondence)
+            print "\n%s correspondence test completed in %s correspondence.txt and %s correspondence summary.txt.\n" % (type_of_correspondence, type_of_correspondence, type_of_correspondence)
 
 # data cleaning launch
 data_cleaned, single_column_amount = data_cleaning(data)
@@ -235,13 +248,13 @@ while stop_app == False:
     [q] Quit application"""
     user_input = raw_input ('> ')
     if user_input == '1':
-        completeness_test(data_cleaned, single_column_amount)
+        completeness_test(data_cleaned, single_column_amount, separator)
     elif user_input == '2':
-        cr_dr_test(data_cleaned, single_column_amount)
+        cr_dr_test(data_cleaned, single_column_amount, separator)
     elif user_input == '3':
-        correspondence(data_cleaned, single_column_amount)
+        correspondence(data_cleaned, single_column_amount, separator)
     elif user_input == '7':
-        detail(data_cleaned)
+        detail(data_cleaned, separator)
     elif user_input == 'q':
         stop_app = False
         break
