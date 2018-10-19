@@ -1,5 +1,5 @@
 # coding: utf-8
-# copyright Arunas Umbrasas, 2018
+# copyright Arunas Umbrasas, 2018 all rights reserved
 # arunas.umb@gmail.com
 
 import pandas as pd
@@ -7,11 +7,12 @@ import re
 from sys import argv
 
 print '\n'
-print '*'*80
+print '*'*33, " JET automator ", '*'*33
 
 # check argv arguments provided, load config if provided, otherwise ask to specify separator
 if len(argv) == 3:
     script, filename, i = argv
+
     # import separator from config file if available
     print '\nImporting %r.' % filename
     with open('config.txt', 'rU') as in_file:
@@ -19,13 +20,7 @@ if len(argv) == 3:
     separator = config_list[0]
 elif len(argv) == 2:
     script, filename = argv
-    # specify separator if config file unavailable
-    print '\nImporting %r. Plese specify column separator and press enter. Example what to type: ,' % filename
-    separator = raw_input("> ")
-    # print help section if help argument is specified
     if filename == "help":
-        print '\n'
-        print '*'*80
         print '''\nJET automator help
 
         USAGE: JET automator can be launched using one or two arguments as follows:
@@ -35,6 +30,11 @@ elif len(argv) == 2:
         [data file name] - the name of the datafile, which is contained within the same folder and is .csv
         [i] - flag makes the app try to import column names from a previous launch (config.txt should be available)\n'''
         quit()
+    else:
+        # specify separator if config file unavailable
+        print '\nImporting %r. Plese specify column separator and press enter. Example what to type: ,' % filename
+        separator = raw_input("> ")
+    # print help section if help argument is specified
 else:
     print "Please specify at least the data file as argument, eg. python JET_automator.py data.csv or python JET_automator.py help"
 
@@ -55,7 +55,7 @@ def data_cleaning(data):
     if len(argv) == 3:
         with open('config.txt', 'rU') as in_file:
             config_list = in_file.read().split('\n')
-        print '\nColumn names loaded from config file.'
+        print '\nSeparator and column names loaded from config file.'
         print config_list
         # assigning variables from config
         acc_no = config_list[1]
@@ -134,7 +134,7 @@ def completeness_test(data_cleaned, single_column_amount, separator):
         completeness = data_cleaned.groupby(['Account no']).agg({'Credit':'sum','Debit':'sum'})
 
     # write to file and complete
-    completeness.to_csv(r'completeness.txt', sep=separator, mode='a')
+    completeness.to_csv(r'completeness.txt', sep=separator, mode='w', index=False)
     print '\n'
     print '*'*80
     print "\nCompleteness test completed in completeness.txt."
@@ -165,7 +165,7 @@ def cr_dr_test(data_cleaned, single_column_amount, separator):
             result = 'failed'
 
     # write to file and complete
-    cr_dr.to_csv(r'cr_dr.txt', sep=separator, mode='a')
+    cr_dr.to_csv(r'cr_dr.txt', sep=separator, mode='w', index=False)
     print '\n'
     print '*'*80
     print "\nCredits = Debits test completed in cr_dr.txt. Test %s with diff %d." % (result, diff)
@@ -185,7 +185,7 @@ def detail(data_cleaned, separator):
         else:
             detail = data_cleaned.loc[data_cleaned['Account no'].astype(str) == str(account_detail)]
             # complete and write to file
-            detail.to_csv(r'%s detail.txt' % account_detail, sep=separator, mode='a')
+            detail.to_csv(r'%s detail.txt' % account_detail, sep=separator, mode='w', index=False)
             print '\n'
             print '*'*80
             print "\n%s detail saved in %s detail.txt.\n" % (account_detail, account_detail)  
@@ -225,8 +225,8 @@ def correspondence(data_cleaned, single_column_amount, separator):
                 correspondence_summary = correspondence.groupby(['Account no', '%s correspondence' % type_of_correspondence]).agg({'Amount': 'sum'})
 
             # complete and write to file
-            correspondence.to_csv(r'%s correspondence.txt' % type_of_correspondence, sep=separator, mode='a')
-            correspondence_summary.to_csv(r'%s correspondence summary.txt' % type_of_correspondence, sep=separator, mode='a')
+            correspondence.to_csv(r'%s correspondence.txt' % type_of_correspondence, sep=separator, mode='w', index=False)
+            correspondence_summary.to_csv(r'%s correspondence summary.txt' % type_of_correspondence, sep=separator, mode='w', index=False)
             print '\n'
             print '*'*80
             print "\n%s correspondence test completed in %s correspondence.txt and %s correspondence summary.txt.\n" % (type_of_correspondence, type_of_correspondence, type_of_correspondence)
@@ -243,7 +243,7 @@ def user_summary(data_cleaned, single_column_amount, separator):
     
     # complete and write to file
     user_summary = user_summary.sort_values(['Transaction count'])
-    user_summary.to_csv('user summary.txt', sep=separator, mode='a')
+    user_summary.to_csv('user summary.txt', sep=separator, mode='w', index=False)
     print '\n'
     print '*'*80
     print "User summary saved in user summary.txt.\n"
@@ -260,7 +260,7 @@ def seldom_used(data_cleaned, single_column_amount, separator):
     
     # complete and write to file
     seldom_summary = seldom_summary.sort_values(['Transaction count'])
-    seldom_summary.to_csv('seldom used.txt', sep=separator, mode='a')
+    seldom_summary.to_csv('seldom used.txt', sep=separator, mode='w', index=False)
     print '\n'
     print '*'*80
     print "Seldom used accounts summary saved in seldom used.txt.\n"
@@ -270,13 +270,12 @@ def backdated_entries(data_cleaned, separator, date_conversion_fail):
         print '\n'
         print '*'*80
         print "[!] Cannot perform test as date conversion failed. Check date format and re-import data file.\n"
-        break
     else:
         backdated = data_cleaned.where(data_cleaned['Transaction date'] < data_cleaned['Entry date'])
-        backdated.dropna().to_csv('backdated entries.txt', sep=separator, mode='a')
+        backdated.dropna().to_csv('backdated entries.txt', sep=separator, mode='w', index=False)
         print '\n'
         print '*'*80
-        print "Backdated entries detail saved in backdated entries.txt.\n"
+        print "Backdated entries detail saved in backdated entries.txt."
 
 # data cleaning launch
 data_cleaned, single_column_amount, date_conversion_fail = data_cleaning(data)
@@ -292,7 +291,7 @@ while stop_app == False:
     [3] Correspondence
     [4] User summary
     [5] Seldom used accounts summary
-    [6] Back-dated postings (-)
+    [6] Back-dated postings
     [7] GL account detail
     [q] Quit application"""
     user_input = raw_input ('> ')
@@ -307,7 +306,7 @@ while stop_app == False:
     elif user_input == '5':
         seldom_used(data_cleaned, single_column_amount, separator)
     elif user_input == '6':
-        backdated_entries(data_cleaned, separator, data_conversion_fail)
+        backdated_entries(data_cleaned, separator, date_conversion_fail)
     elif user_input == '7':
         detail(data_cleaned, separator)
     elif user_input == 'q':
