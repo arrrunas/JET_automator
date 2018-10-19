@@ -63,7 +63,7 @@ def data_cleaning(data):
         credit = config_list[3]
         trans_ID = config_list[4]
         user_ID = config_list[5]
-        post_date = config_list[6]
+        trans_date = config_list[6]
         entry_date = config_list[7]
     elif len(argv) == 2:
         print "Please specify name of the column containing account number."
@@ -76,12 +76,12 @@ def data_cleaning(data):
         trans_ID = raw_input('> ')
         print "Please specify name of the column containing user ID."
         user_ID = raw_input('> ')
-        print "Please specify name of the column containing posting date."
-        post_date = raw_input('> ')
-        print "Please specify name of the column containing entry date."
+        print "Please specify name of the column containing transaction date."
+        trans_date = raw_input('> ')
+        print "Please specify name of the column containing entry (posting) date."
         entry_date = raw_input('> ')
         # writing column information to file
-        config_list = [separator, acc_no, debit, credit, trans_ID, user_ID, post_date, entry_date]
+        config_list = [separator, acc_no, debit, credit, trans_ID, user_ID, trans_date, entry_date]
         with open('config.txt', 'w') as out_file:
             out_file.write('\n'.join(config_list))
 
@@ -93,14 +93,14 @@ def data_cleaning(data):
         single_column_amount = True
         data_cleaned = data.rename(columns={acc_no:'Account no', debit: 'Amount',\
             trans_ID: 'Transaction ID', user_ID: 'User ID',\
-            post_date:'Posting date', entry_date:'Entry date'})
+            trans_date:'Transaction date', entry_date:'Entry date'})
         data_cleaned['Amount'] = data_cleaned.Amount.replace('[\$,)]', '', regex=True)
         data_cleaned['Amount'] = data_cleaned.Amount.replace('[\€,)]', '', regex=True)
         data_cleaned['Amount'] = data_cleaned.Amount.replace('[\EUR,)]', '', regex=True).astype(float)
     else:
         data_cleaned = data.rename(columns={acc_no:'Account no', credit: 'Credit',\
             debit: 'Debit', trans_ID: 'Transaction ID', user_ID: 'User ID',\
-            post_date:'Posting date', entry_date:'Entry date'})
+            trans_date:'Transaction date', entry_date:'Entry date'})
         data_cleaned['Credit'] = data_cleaned.Credit.replace('[\$,)]', '', regex=True)
         data_cleaned['Debit'] = data_cleaned.Debit.replace('[\$,)]', '', regex=True)
         data_cleaned['Credit'] = data_cleaned.Credit.replace('[\€,)]', '', regex=True)
@@ -112,17 +112,19 @@ def data_cleaning(data):
     data_cleaned[['Account no', 'Transaction ID', 'User ID']] = data_cleaned[['Account no', \
     'Transaction ID', 'User ID']].astype(str)
         # type conversions that do not depend on single_column_amount
+    date_conversion_fail = True
     try:
-        data_cleaned[['Posting date', 'Entry date']] = pd.to_datetime(data_cleaned[['Posting date', 'Entry date']])
+        data_cleaned[['Transaction date', 'Entry date']] = data_cleaned[['Transaction date', 'Entry date']].astype('datetime64[ns]')
+        date_conversion_fail = False
     except:
-        print "[!] Could not convert Posting date and Entry date columns to dates.\n"
+        print "[!] Could not convert Transaction date and Entry date columns to dates.\n"
     # complete and print columns, data types
     print '*'*80
     print '\nData cleaning completed. Columns identified as follows:\n'
     print data_cleaned.columns
     print '\n'
     print data_cleaned.dtypes
-    return (data_cleaned, single_column_amount)
+    return (data_cleaned, single_column_amount, date_conversion_fail)
 
 # completeness test: group by account name and show sum of CR/DR
 def completeness_test(data_cleaned, single_column_amount, separator):
@@ -229,8 +231,55 @@ def correspondence(data_cleaned, single_column_amount, separator):
             print '*'*80
             print "\n%s correspondence test completed in %s correspondence.txt and %s correspondence summary.txt.\n" % (type_of_correspondence, type_of_correspondence, type_of_correspondence)
 
+def user_summary(data_cleaned, single_column_amount, separator):
+    if single_column_amount == True:
+        user_summary = data_cleaned.groupby(['User ID'])\
+        .agg({'Account no': 'count', 'Amount': 'sum'})\
+        .rename(columns={'Account no': 'Transaction count'})
+    elif single_column_amount == False:
+        user_summary = data_cleaned.groupby(['User ID'])\
+        .agg({'Account no': 'count', 'Credit': 'sum', 'Debit': 'sum'})\
+        .rename(columns={'Account no': 'Transaction count'})
+    
+    # complete and write to file
+    user_summary = user_summary.sort_values(['Transaction count'])
+    user_summary.to_csv('user summary.txt', sep=separator, mode='a')
+    print '\n'
+    print '*'*80
+    print "User summary saved in user summary.txt.\n"
+
+def seldom_used(data_cleaned, single_column_amount, separator):
+    if single_column_amount == True:
+        seldom_summary = data_cleaned.groupby(['Account no'])\
+        .agg({'Transaction ID': 'count', 'Amount': 'sum'})\
+        .rename(columns={'Transaction ID': 'Transaction count'})
+    elif single_column_amount == False:
+        seldom_summary = data_cleaned.groupby(['Account no'])\
+        .agg({'Transaction ID': 'count', 'Credit': 'sum', 'Debit': 'sum'})\
+        .rename(columns={'Transaction ID': 'Transaction count'})
+    
+    # complete and write to file
+    seldom_summary = seldom_summary.sort_values(['Transaction count'])
+    seldom_summary.to_csv('seldom used.txt', sep=separator, mode='a')
+    print '\n'
+    print '*'*80
+    print "Seldom used accounts summary saved in seldom used.txt.\n"
+
+def backdated_entries(data_cleaned, separator, date_conversion_fail):
+    if date_conversion_fail == True:
+        print '\n'
+        print '*'*80
+        print "[!] Cannot perform test as date conversion failed. Check date format and re-import data file.\n"
+        break
+    else:
+        backdated = data_cleaned.where(data_cleaned['Transaction date'] < data_cleaned['Entry date'])
+        backdated.dropna().to_csv('backdated entries.txt', sep=separator, mode='a')
+        print '\n'
+        print '*'*80
+        print "Backdated entries detail saved in backdated entries.txt.\n"
+
 # data cleaning launch
-data_cleaned, single_column_amount = data_cleaning(data)
+data_cleaned, single_column_amount, date_conversion_fail = data_cleaning(data)
 
 # application menu 
 stop_app = False
@@ -241,8 +290,8 @@ while stop_app == False:
     [1] Completeness
     [2] CR=DR
     [3] Correspondence
-    [4] User summary (-)
-    [5] Seldom used accounts summary (-)
+    [4] User summary
+    [5] Seldom used accounts summary
     [6] Back-dated postings (-)
     [7] GL account detail
     [q] Quit application"""
@@ -253,6 +302,12 @@ while stop_app == False:
         cr_dr_test(data_cleaned, single_column_amount, separator)
     elif user_input == '3':
         correspondence(data_cleaned, single_column_amount, separator)
+    elif user_input == '4':
+        user_summary(data_cleaned, single_column_amount, separator)
+    elif user_input == '5':
+        seldom_used(data_cleaned, single_column_amount, separator)
+    elif user_input == '6':
+        backdated_entries(data_cleaned, separator, data_conversion_fail)
     elif user_input == '7':
         detail(data_cleaned, separator)
     elif user_input == 'q':
