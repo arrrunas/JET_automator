@@ -5,6 +5,7 @@
 import pandas as pd
 import re
 from sys import argv
+import readline
 
 print '\n'
 print '*'*33, " JET automator ", '*'*33
@@ -40,7 +41,7 @@ else:
 
 
 # import tasks are run
-data = pd.DataFrame.from_csv(filename, sep=separator, index_col=None)
+data = pd.read_csv(filename, sep=separator, index_col=None)
 
 print 'Import succesful. Following columns imported:\n'
 print data.columns
@@ -66,6 +67,22 @@ def data_cleaning(data):
         trans_date = config_list[6]
         entry_date = config_list[7]
     elif len(argv) == 2:
+        #inner function for tab-completion of column names
+        list_of_columns = list(data.columns.values)
+        print "List of columns detected:"
+        print list_of_columns
+        print "\n"
+        def complete(text, state):
+            for column in list_of_columns:
+                if column.startswith(text):
+                    if not state:
+                        return column
+                    else:
+                        state -= 1
+
+        readline.parse_and_bind("tab: complete")
+        readline.set_completer(complete)
+
         print "Please specify name of the column containing account number."
         acc_no = raw_input('> ')
         print "Please specify name of the column containing debit amounts."
