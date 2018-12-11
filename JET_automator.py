@@ -5,7 +5,7 @@
 import pandas as pd
 import re
 from sys import argv
-import readline
+# import pyreadline
 
 print '\n'
 print '*'*33, " JET automator ", '*'*33
@@ -19,6 +19,7 @@ if len(argv) == 3:
     with open('config.txt', 'rU') as in_file:
         config_list = in_file.read().split('\n')
     separator = config_list[0]
+    dec_separator = config_list[8]
 elif len(argv) == 2:
     script, filename = argv
     if filename == "help":
@@ -33,15 +34,17 @@ elif len(argv) == 2:
         quit()
     else:
         # specify separator if config file unavailable
-        print '\nImporting %r. Plese specify column separator and press enter. Example what to type: ,' % filename
+        print '\nImporting %r. Plese specify column separator and press enter. Example what to type: ;' % filename
         separator = raw_input("> ")
+        print '\nImporting %r. Plese specify column separator and press enter. Example what to type: , or .' % filename
+        dec_separator = raw_input("> ")
     # print help section if help argument is specified
 else:
     print "Please specify at least the data file as argument, eg. python JET_automator.py data.csv or python JET_automator.py help"
 
 
 # import tasks are run
-data = pd.read_csv(filename, sep=separator, index_col=None)
+data = pd.read_csv(filename, sep=separator, decimal=dec_separator, index_col=None)
 
 print 'Import succesful. Following columns imported:\n'
 print data.columns
@@ -67,21 +70,22 @@ def data_cleaning(data):
         trans_date = config_list[6]
         entry_date = config_list[7]
     elif len(argv) == 2:
-        #inner function for tab-completion of column names
         list_of_columns = list(data.columns.values)
         print "List of columns detected:"
         print list_of_columns
         print "\n"
-        def complete(text, state):
-            for column in list_of_columns:
-                if column.startswith(text):
-                    if not state:
-                        return column
-                    else:
-                        state -= 1
 
-        readline.parse_and_bind("tab: complete")
-        readline.set_completer(complete)
+        #inner function for tab-completion of column names
+        #def complete(text, state):
+        #    for column in list_of_columns:
+        #        if column.startswith(text):
+        #            if not state:
+        #                return column
+        #            else:
+        #                state -= 1
+
+        #pyreadline.parse_and_bind("tab: complete")
+        #pyreadline.set_completer(complete)
 
         print "Please specify name of the column containing account number."
         acc_no = raw_input('> ')
@@ -98,7 +102,7 @@ def data_cleaning(data):
         print "Please specify name of the column containing entry (posting) date."
         entry_date = raw_input('> ')
         # writing column information to file
-        config_list = [separator, acc_no, debit, credit, trans_ID, user_ID, trans_date, entry_date]
+        config_list = [separator, acc_no, debit, credit, trans_ID, user_ID, trans_date, entry_date, dec_separator]
         with open('config.txt', 'w') as out_file:
             out_file.write('\n'.join(config_list))
 
@@ -126,8 +130,19 @@ def data_cleaning(data):
         data_cleaned['Debit'] = data_cleaned.Debit.replace('[\EUR,)]', '', regex=True).astype(float)
     
     # type conversions that do not depend on single_column_amount
-    data_cleaned[['Account no', 'Transaction ID', 'User ID']] = data_cleaned[['Account no', \
-    'Transaction ID', 'User ID']].astype(str)
+    try:
+        data_cleaned[['Account no']] = data_cleaned[['Account no']].astype(str)
+    except:
+        print "[!] Could not convert account number."
+    try:
+        data_cleaned[['Transaction ID']] = data_cleaned[['Transaction ID']].astype(str)
+    except:
+        print "[!] Could not convert transaction ID."
+    try:
+        data_cleaned[['User ID']] = data_cleaned[['User ID']].astype(str)
+    except:
+        print "[!] Could not convert User ID."
+
         # type conversions that do not depend on single_column_amount
     date_conversion_fail = True
     try:
@@ -146,12 +161,12 @@ def data_cleaning(data):
 # completeness test: group by account name and show sum of CR/DR
 def completeness_test(data_cleaned, single_column_amount, separator):
     if single_column_amount == True:
-        completeness = data_cleaned.groupby(['Account no']).agg({'Amount':'sum'})
+        completeness = data_cleaned.groupby(['Account no'], as_index=False).agg({'Amount':'sum'})
     else:
-        completeness = data_cleaned.groupby(['Account no']).agg({'Credit':'sum','Debit':'sum'})
+        completeness = data_cleaned.groupby(['Account no'], as_index=False).agg({'Credit':'sum','Debit':'sum'})
 
     # write to file and complete
-    completeness.to_csv(r'completeness.txt', sep=separator, mode='w', index=False)
+    completeness.to_csv(r'completeness.txt', sep=separator, decimal=',', mode='w', index=False)
     print '\n'
     print '*'*80
     print "\nCompleteness test completed in completeness.txt."
@@ -182,7 +197,7 @@ def cr_dr_test(data_cleaned, single_column_amount, separator):
             result = 'failed'
 
     # write to file and complete
-    cr_dr.to_csv(r'cr_dr.txt', sep=separator, mode='w', index=False)
+    cr_dr.to_csv(r'cr_dr.txt', sep=separator, decimal=',', mode='w', index=False)
     print '\n'
     print '*'*80
     print "\nCredits = Debits test completed in cr_dr.txt. Test %s with diff %d." % (result, diff)
@@ -202,7 +217,7 @@ def detail(data_cleaned, separator):
         else:
             detail = data_cleaned.loc[data_cleaned['Account no'].astype(str) == str(account_detail)]
             # complete and write to file
-            detail.to_csv(r'%s detail.txt' % account_detail, sep=separator, mode='w', index=False)
+            detail.to_csv(r'%s detail.txt' % account_detail, sep=separator, decimal=',', mode='w', index=False)
             print '\n'
             print '*'*80
             print "\n%s detail saved in %s detail.txt.\n" % (account_detail, account_detail)  
@@ -237,47 +252,47 @@ def correspondence(data_cleaned, single_column_amount, separator):
             
             # correspondence summary
             if single_column_amount == False:
-                correspondence_summary = correspondence.groupby(['Account no', '%s correspondence' % type_of_correspondence]).agg({'Credit': 'sum', 'Debit': 'sum'})
+                correspondence_summary = correspondence.groupby(['Account no', '%s correspondence' % type_of_correspondence], as_index=False).agg({'Credit': 'sum', 'Debit': 'sum'})
             else:
-                correspondence_summary = correspondence.groupby(['Account no', '%s correspondence' % type_of_correspondence]).agg({'Amount': 'sum'})
+                correspondence_summary = correspondence.groupby(['Account no', '%s correspondence' % type_of_correspondence], as_index=False).agg({'Amount': 'sum'})
 
             # complete and write to file
-            correspondence.to_csv(r'%s correspondence.txt' % type_of_correspondence, sep=separator, mode='w', index=False)
-            correspondence_summary.to_csv(r'%s correspondence summary.txt' % type_of_correspondence, sep=separator, mode='w', index=False)
+            correspondence.to_csv(r'%s correspondence.txt' % type_of_correspondence, sep=separator, decimal=',', mode='w', index=False)
+            correspondence_summary.to_csv(r'%s correspondence summary.txt' % type_of_correspondence, sep=separator, decimal=',', mode='w', index=False)
             print '\n'
             print '*'*80
             print "\n%s correspondence test completed in %s correspondence.txt and %s correspondence summary.txt.\n" % (type_of_correspondence, type_of_correspondence, type_of_correspondence)
 
 def user_summary(data_cleaned, single_column_amount, separator):
     if single_column_amount == True:
-        user_summary = data_cleaned.groupby(['User ID'])\
+        user_summary = data_cleaned.groupby(['User ID'], as_index=False)\
         .agg({'Account no': 'count', 'Amount': 'sum'})\
         .rename(columns={'Account no': 'Transaction count'})
     elif single_column_amount == False:
-        user_summary = data_cleaned.groupby(['User ID'])\
+        user_summary = data_cleaned.groupby(['User ID'], as_index=False)\
         .agg({'Account no': 'count', 'Credit': 'sum', 'Debit': 'sum'})\
         .rename(columns={'Account no': 'Transaction count'})
     
     # complete and write to file
     user_summary = user_summary.sort_values(['Transaction count'])
-    user_summary.to_csv('user summary.txt', sep=separator, mode='w', index=False)
+    user_summary.to_csv('user summary.txt', sep=separator, decimal=',', mode='w', index=False)
     print '\n'
     print '*'*80
     print "User summary saved in user summary.txt.\n"
 
 def seldom_used(data_cleaned, single_column_amount, separator):
     if single_column_amount == True:
-        seldom_summary = data_cleaned.groupby(['Account no'])\
+        seldom_summary = data_cleaned.groupby(['Account no'], as_index=False)\
         .agg({'Transaction ID': 'count', 'Amount': 'sum'})\
         .rename(columns={'Transaction ID': 'Transaction count'})
     elif single_column_amount == False:
-        seldom_summary = data_cleaned.groupby(['Account no'])\
+        seldom_summary = data_cleaned.groupby(['Account no'], as_index=False)\
         .agg({'Transaction ID': 'count', 'Credit': 'sum', 'Debit': 'sum'})\
         .rename(columns={'Transaction ID': 'Transaction count'})
     
     # complete and write to file
     seldom_summary = seldom_summary.sort_values(['Transaction count'])
-    seldom_summary.to_csv('seldom used.txt', sep=separator, mode='w', index=False)
+    seldom_summary.to_csv('seldom used.txt', sep=separator, decimal=',', mode='w', index=False)
     print '\n'
     print '*'*80
     print "Seldom used accounts summary saved in seldom used.txt.\n"
@@ -289,7 +304,7 @@ def backdated_entries(data_cleaned, separator, date_conversion_fail):
         print "[!] Cannot perform test as date conversion failed. Check date format and re-import data file.\n"
     else:
         backdated = data_cleaned.where(data_cleaned['Transaction date'] < data_cleaned['Entry date'])
-        backdated.dropna().to_csv('backdated entries.txt', sep=separator, mode='w', index=False)
+        backdated.dropna().to_csv('backdated entries.txt', sep=separator, decimal=',', mode='w', index=False)
         print '\n'
         print '*'*80
         print "Backdated entries detail saved in backdated entries.txt."
