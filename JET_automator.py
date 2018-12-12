@@ -36,7 +36,7 @@ elif len(argv) == 2:
         # specify separator if config file unavailable
         print '\nImporting %r. Plese specify column separator and press enter. Example what to type: ;' % filename
         separator = raw_input("> ")
-        print '\nImporting %r. Plese specify column separator and press enter. Example what to type: , or .' % filename
+        print '\nImporting %r. Plese specify decimal separator and press enter. Example what to type: , or .' % filename
         dec_separator = raw_input("> ")
     # print help section if help argument is specified
 else:
