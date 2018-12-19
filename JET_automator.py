@@ -36,7 +36,7 @@ elif len(argv) == 2:
         # specify separator if config file unavailable
         print '\nImporting %r. Plese specify column separator and press enter. Example what to type: ;' % filename
         separator = raw_input("> ")
-        print '\nImporting %r. Plese specify decimal separator and press enter. Example what to type: , or .' % filename
+        print '\nImporting %r. Plese specify column separator and press enter. Example what to type: , or .' % filename
         dec_separator = raw_input("> ")
     # print help section if help argument is specified
 else:
@@ -245,8 +245,10 @@ def correspondence(data_cleaned, single_column_amount, separator):
                 account_transactions = data_cleaned.loc[data_cleaned['Account no'].astype(str) == str(account), 'Transaction ID']
                 data_cleaned.loc[data_cleaned['Transaction ID'].isin(account_transactions), '%s correspondence' % type_of_correspondence] = 'correspondence'
                 data_cleaned.loc[data_cleaned['Transaction ID'].isin(account_transactions), '%s correspondence details' % type_of_correspondence] = 'Corresponds to %s' % account
-                data_cleaned.loc[data_cleaned['Account no'].astype(str) == str(account), '%s correspondence' % type_of_correspondence] = "%s" % type_of_correspondence
+                # data_cleaned.loc[data_cleaned['Account no'].astype(str) == str(account), '%s correspondence' % type_of_correspondence] = "%s" % type_of_correspondence
             
+            # out-of-loop adjustment (i.e. mark all revenue accounts as revenue)
+            data_cleaned.loc[data_cleaned['Account no'].isin(correspondence_accounts), '%s correspondence' % type_of_correspondence] = "%s" % type_of_correspondence
             # filter out any rows not part of correspondence
             correspondence = data_cleaned.loc[data_cleaned['%s correspondence' % type_of_correspondence] != ""]
             
