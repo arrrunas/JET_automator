@@ -1,6 +1,4 @@
-# process_automation
-
-JET automator README
+# JET automator
 
 Script imports csv file, asks to specify separator and decimal, asks to identify columns for analysis 
 and allows to perform the following financial tests automatically:
